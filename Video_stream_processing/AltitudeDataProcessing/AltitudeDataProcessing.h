@@ -1,52 +1,43 @@
 #include <cmath>
+#include <algorithm>
 #include "AltitudeDataProcessingBase.h"
 
 namespace altitude
 {
-    class DefaultAltitude : public BaseAltitude
-    {
-        public:
 
-            DefaultAltitude(double altitude) : altitude_(altitude) {};
+class DefaultAltitude : public AltitudeDataProcessingBase
+{
+    public:
 
-            int exp_circle_size(void) override;
-        
-        private:
+        DefaultAltitude(double altitude);
 
-            double altitude_;
-    };
+        int exp_circle_size(void) override;
 
-    class LidarAltitude : public BaseAltitude
-    {
-        public:
+};
 
-            LidarAltitude(double altitude) 
-            {
-                altitude_ = altitude * 100 - 10;
-            };
+////////////////////////////////////////////////////////////////////////////////////////////
 
-            int exp_circle_size(void) override;
-        
-        private:
+class LidarAltitude : public AltitudeDataProcessingBase
+{
+    public:
 
-            double altitude_;
-    };
+        LidarAltitude(double altitude);
 
-    class PixhawkAltitude : public BaseAltitude
-    {
-        public:
+        int exp_circle_size(void) override;
+    
+};
 
-            PixhawkAltitude(double altitude) 
-            {
-                altitude_ = altitude * 100;
-            };
+////////////////////////////////////////////////////////////////////////////////////////////
 
-            int exp_circle_size(void) override;
-        
-        private:
+class PixhawkAltitude : public AltitudeDataProcessingBase
+{
+    public:
 
-            double altitude_;
-    };
+        PixhawkAltitude(double altitude);
+
+        int exp_circle_size(void) override;
+    
+};
 
 
-}
+} // namespace altitude

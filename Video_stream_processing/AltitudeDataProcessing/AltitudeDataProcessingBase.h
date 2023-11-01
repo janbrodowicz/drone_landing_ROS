@@ -1,11 +1,22 @@
+#include "IAltitudeDataProcessing.h"
+
+
 namespace altitude
 {
-    class BaseAltitude
-    {
-        public:
-            virtual int exp_circle_size(void) = 0;
 
-            virtual ~BaseAltitude() = default;
-    };
+class AltitudeDataProcessingBase : public IAltitudeDataProcessing
+{
+    public:
+
+        AltitudeDataProcessingBase() {};
+
+        int exp_square_size(int circle_size) override;
+
+    protected:
+
+        double m_altitude;
+
+};
+
 
 }
