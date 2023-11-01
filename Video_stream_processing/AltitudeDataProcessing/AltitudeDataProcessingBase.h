@@ -19,4 +19,4 @@ class AltitudeDataProcessingBase : public IAltitudeDataProcessing
 };
 
 
-}
+} // namespace altitude
