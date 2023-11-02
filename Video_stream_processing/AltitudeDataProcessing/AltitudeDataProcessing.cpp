@@ -1,5 +1,6 @@
 #include "AltitudeDataProcessing.h"
 
+
 using namespace altitude;
 
 LidarAltitude::LidarAltitude(double altitude) : AltitudeDataProcessingBase()
