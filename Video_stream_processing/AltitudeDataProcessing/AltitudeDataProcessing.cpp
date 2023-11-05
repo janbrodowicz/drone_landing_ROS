@@ -3,7 +3,7 @@
 
 using namespace altitude;
 
-LidarAltitude::LidarAltitude(double altitude) : AltitudeDataProcessingBase()
+LidarAltitude::LidarAltitude(double altitude) : AltitudeDataProcessingBase(altitude)
 {
     m_altitude = std::max(std::min((altitude * 100 - 10), 300.0), 0.0);
 };
@@ -20,7 +20,7 @@ int LidarAltitude::exp_circle_size(void)
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-PixhawkAltitude::PixhawkAltitude(double altitude) : AltitudeDataProcessingBase()
+PixhawkAltitude::PixhawkAltitude(double altitude) : AltitudeDataProcessingBase(altitude)
 {
     m_altitude = std::max(std::min(altitude * 100, 300.0), 0.0);
 };
@@ -35,9 +35,9 @@ int PixhawkAltitude::exp_circle_size(void)
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-DefaultAltitude::DefaultAltitude(double altitude) : AltitudeDataProcessingBase()
+DefaultAltitude::DefaultAltitude(double altitude) : AltitudeDataProcessingBase(altitude)
 { 
-    m_altitude = altitude;
+
 };
 
 int DefaultAltitude::exp_circle_size(void)

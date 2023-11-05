@@ -1,94 +1,14 @@
-/*
-    MIT License
-
-    Copyright (c) 2020
-    Krzysztof Blachut, Hubert Szolc, Mateusz Wasala, Tomasz Kryjak, Marek Gorgon
-    email: {kblachut, szolc, wasala, tomasz.kryjak, mago} @agh.edu.pl
-    Computer Vision Laboratory
-    Department of Automatic Control and Robotics
-    Faculty of Electrical Engineering, Automatics, Computer Science and Biomedical Engineering
-    AGH University of Science and Technology, Krakow, Poland
-
-    Permission is hereby granted, free of charge, to any person obtaining a copy
-    of this software and associated documentation files (the "Software"), to deal
-    in the Software without restriction, including without limitation the rights
-    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-    copies of the Software, and to permit persons to whom the Software is
-    furnished to do so, subject to the following conditions:
-
-    The above copyright notice and this permission notice shall be included in all
-    copies or substantial portions of the Software.
-
-    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-    SOFTWARE.
-*/
-
-/*  Versions:
-    01.04.2020 - Version 1.0
-    07.07.2020 - Version 2.0
-*/
-
-/*
-    The OpenCV library in version 4.1.0 was used in this project, please make sure you have it installed
-    and configured properly in order to run the application.
-
-    In the dataset directory there are three sets of test images. In test_set1 there are 32 images
-    with the size of the marker determined manually and placed in the test_set1_data.csv file.
-    In test_set2 there are 18 images with the altitude data from Pixhawk controller and placed
-    in the test_set2_data.csv file. In test_set3 there are 25 images with the altitude data obtained with LIDAR
-    and placed in the test_set3_data.csv file. All 75 images are in HD resolution (parameters WIDTH 1280, HEIGHT 720).
-
-    The size of the windows for thresholding can be configured, but for now only 128x128 was used
-    (parameters pSX 128, pSY 128).
-
-    If you use a dataset with many images, you may want to skip some frames from the first one
-    (parameter START_FRAME 0) or some subsequent frames (parameter STEP 1).
-
-    More test sets will be added later and synchronized with the data from LIDAR. The mounting
-    of the camera is now changed so there are no visible parts of the drone in the image -
-    that is done for the newest test set (and it will be the standard for the next sets).
-    For the older ones (test_set1 and test_set2) you can use the provided mask (parameter UAV_MASK 1)
-    to avoid the possible problems with marker detection.
-
-    If you use the altitude data from Pixhawk or LIDAR, you may want to average the values,
-    but do it only if the differences between subsequent frames and measurements are small.
-    Otherwise process each value separately (parameter AVERAGE 0).
-
-    You can choose between three provided test sets or use your own set (with our marker to detect
-    it correctly, the marker is provided in the repository). Put a full or relative path to the
-    directory with images (PATH). The size of the marker determined manually or the altitude data
-    from either Pixhawk or LIDAR is read from the .csv file (PATH_HEIGHT).
-
-    If you use the marker size in pixels instead of the altitude, use the test_set1_data.csv
-    file as an example with the header (Frame_ID, Circle size [pix]) - it is the default mode.
-    If you use the altitude data from Pixhawk, put it in metres into the file
-    as in the test_set2_data.csv file and put "Pixhawk" in the header (Frame_ID Pixhawk, Altitude [m]).
-    If you use the altitude data from LIDAR, put it in metres into the file
-    as in the test_set3_data.csv file and put "LIDAR" in the header (Frame_ID LIDAR, Altitude [m]).
-
-    The logs with the number of objects from CCL, the position of the marker and its offset
-    from the centre of the image along with its orientation are written to the .csv file (PATH_LOGS).
-    The mask used to remove visible parts of the drone from the image is read from the .png file (PATH_MASK).
-
-    If you have any questions about the application, feel free to contact us.
-*/
-
 #include <iostream>
-#include <dirent.h>
 #include <string>
 #include <vector>
-#include <cmath>
-#include <algorithm>
 #include <fstream>
 #include <experimental/filesystem>
-#include <opencv2/opencv.hpp>
+
+#include "AltitudeDataProcessing/AltitudeDataProcessing.h"
+#include "FrameProcessing/FrameProcessing.h"
 
 namespace fs = std::experimental::filesystem;
+
 
 // -------------------------------------------------------------------------------------------------------------------
 // CONSTANT PARAMETERS
@@ -115,17 +35,14 @@ namespace fs = std::experimental::filesystem;
 #define AVERAGE 0
 
 // Path to a directory containing a dataset
-// const std::string PATH = "dataset/test_set1/";
-// const fs::path CURR_PATH = fs::current_path();
 const fs::path PATH{"/home/jan/ROS_project/drone_landing_ROS/dataset/test_set1"};
 const std::string PATH_HEIGHT = "/home/jan/ROS_project/drone_landing_ROS/dataset/test_set1_data.csv";
-const std::string PATH_LOGS = "/home/jan/ROS_project/drone_landing_ROS/output/test_set1_logs.csv";
+const std::string PATH_LOGS = "/home/jan/ROS_project/drone_landing_ROS/output/test_set1_logs_test.csv";
 
 #if USE_MASK
-const std::string PATH_MASK = "uav_mask.png";
+const std::string PATH_MASK = "/home/jan/ROS_project/drone_landing_ROS/images/uav_mask.png";
 #endif
 
-// -------------------------------------------------------------------------------------------------------------------
 int main()
 {
     // Open directory with a dataset
@@ -176,46 +93,31 @@ int main()
             {
                 getline(inputFile, filename, ',');
                 inputFile >> altitude;
-                alt[i] = std::stod(altitude) * 100 - 10; // Subtract 10 cm as it's the difference between position of LIDAR and camera in our case
-                alt[i] = std::max(std::min(alt[i], 300.0), 0.0);
-#if AVERAGE
-                if (i >= 4)
-                    alt[i] = (alt[i] + alt[i - 1] + alt[i - 2] + alt[i - 3] + alt[i - 4]) / 5;
-#endif
-                // Convert altitude to expected circle size
-                table_circles[i] = int(3.43375604675693e-15 * pow(alt[i], 8) - 4.77097482299868e-12 * pow(alt[i], 7) +
-                                   2.79264529276849e-09 * pow(alt[i], 6) - 8.96208749876710e-07 * pow(alt[i], 5) + 0.000172002819190201 * pow(alt[i], 4) -
-                                   0.0202309024343306 * pow(alt[i], 3) + 1.44107699084859 * pow(alt[i], 2) - 59.7115579325702 * alt[i] + 1345.58241758463);
+                double al = std::stod(altitude);
+                altitude::LidarAltitude lidar(al);
+                table_circles[i] = lidar.exp_circle_size();
             }
         }
-
-        // Use altitude data from Pixhawk
         else if (header.find("Pixhawk") != std::string::npos)
         {
             for (int i = 0; i < nimages; i++)
             {
                 getline(inputFile, filename, ',');
                 inputFile >> altitude;
-                alt[i] = std::stod(altitude) * 100;
-                alt[i] = std::max(std::min(alt[i], 300.0), 0.0);
-#if AVERAGE
-                if (i >= 4)
-                    alt[i] = (alt[i] + alt[i - 1] + alt[i - 2] + alt[i - 3] + alt[i - 4]) / 5;
-#endif
-                // Convert altitude to expected circle size
-                table_circles[i] = int(- 0.000110976007441677 * pow(alt[i], 3) + 0.0433422982169812 * pow(alt[i], 2) - 6.67322230364540 * alt[i] + 481.517071405531);
+                double al = std::stod(altitude);
+                altitude::PixhawkAltitude pixhawk(al);
+                table_circles[i] = pixhawk.exp_circle_size();
             }
         }
-
-		// Use circle size in pixels (default mode)
-		else
+        else
         {
             for (int i = 0; i < nimages; i++)
             {
                 getline(inputFile, filename, ',');
                 inputFile >> altitude;
-                alt[i] = std::stod(altitude);
-                table_circles[i] = int(alt[i]);
+                double al = std::stod(altitude);
+                altitude::DefaultAltitude def(al);
+                table_circles[i] = def.exp_circle_size();
             }
         }
     }
@@ -243,172 +145,52 @@ int main()
     {
         // Load image
         cv::Mat image = cv::imread(std::string(PATH) + "/" + (*it));
+        frame::FrameProcessing frame(image, HEIGHT, WIDTH, pSX, pSY);
 
         // Display debug info
         std::cout << "Processing file: " << (*it) << std::endl;
 
-        int circle_size = table_circles[it - listOfFiles.begin() - 2];
-        int square_size = table_squares[it - listOfFiles.begin() - 2];
-
         // Conversion to grey and Gaussian blur
-        cv::Mat grey = cv::Mat::zeros(HEIGHT, WIDTH, CV_8UC1);
-        cv::cvtColor(image, grey, cv::COLOR_BGR2GRAY);
-        cv::GaussianBlur(grey, grey, cv::Size(5, 5), 0.65);
+        cv::Mat grey = frame.grey_conversion_blur(5, 0.65);
 
         // Global thresholding
-        cv::Mat IB_G = cv::Mat::zeros(HEIGHT, WIDTH, CV_8UC1);
-        double minG, maxG;
-        cv::minMaxLoc(grey, &minG, &maxG);
-        unsigned int thrG = (maxG - minG) * 0.3 + minG;
-        for (int j = 0; j < WIDTH; j++)
-        {
-            for (int i = 0; i < HEIGHT; i++)
-            {
-                IB_G.at<uchar>(i, j) = 255 * (grey.at<uchar>(i, j) < thrG);
-            }
-        }
+        std::tuple<cv::Mat, unsigned int> global_thr = frame.global_thresholding();
 
         // Local thresholding
-        cv::Mat IB_C = cv::Mat::zeros(HEIGHT, WIDTH, CV_8UC1);
-        int cSize = 7; // Size of the context
-        for (int jj = cSize; jj < WIDTH - cSize; jj++)
-        {
-            for (int ii = cSize; ii < HEIGHT - cSize; ii++)
-            {
-                cv::Mat patch = grey(cv::Range(ii - cSize, ii + cSize), cv::Range(jj - cSize, jj + cSize));
-                unsigned int thrC = (cv::mean(cv::mean(patch).val[0])).val[0];
-                IB_C.at<uchar>(ii, jj) = 255 * (grey.at<uchar>(ii, jj) < thrC);
-            }
-        }
+        cv::Mat IB_C = frame.local_thresholding(7);
 
         // Thresholding in windows
-        cv::Mat IB = cv::Mat::zeros(HEIGHT, WIDTH, CV_8UC1);
-        cv::Mat thresholds = cv::Mat::zeros(floor(HEIGHT / pSX) + 1, floor(WIDTH / pSY) + 1, CV_8UC1);
-
-        for (int jj = 0; jj < WIDTH; jj = jj + pSY)
-        {
-            for (int ii = 0; ii < HEIGHT; ii = ii + pSX)
-            {
-                cv::Mat patch = grey(cv::Range(ii, std::min(ii + pSX - 1, HEIGHT)), cv::Range(jj, std::min(jj + pSY - 1, WIDTH)));
-                double minP, maxP;
-                cv::minMaxLoc(patch, &minP, &maxP);
-                unsigned int thrW = (maxP - minP) * 0.5 + minP;
-                thresholds.at<uchar>(floor(ii / pSX), floor(jj / pSY)) = thrW;
-
-                for (int j = jj; j < std::min(jj + pSY, WIDTH); j++)
-                {
-                    for (int i = ii; i < std::min(ii + pSX, HEIGHT); i++)
-                    {
-                        IB.at<uchar>(i, j) = 255 * (patch.at<uchar>(i % 128, j % 128) < thrW);
-                    }
-                }
-            }
-        }
+        std::tuple<cv::Mat, cv::Mat> windows_thr = frame.thresholding_in_windows();
 
         // Interpolation of image thresholded in windows
-        cv::Mat IB_L = cv::Mat::zeros(HEIGHT, WIDTH, CV_8UC1);
-        int iT, jT;
-        double dX1, dX2, dY1, dY2;
-        int th11, th12, th21, th22;
-        double th1, th2, th;
-
-        for (int jj = 0; jj < WIDTH; jj++)
-        {
-            for (int ii = 0; ii < HEIGHT; ii++)
-            {
-                // Corners of the image
-                if (ii < pSX / 2 && jj < pSY / 2 || ii > (HEIGHT - pSX / 2) && jj < pSY / 2 || ii < pSX / 2 && jj > (WIDTH - pSY / 2) || ii > (HEIGHT - pSX / 2) && jj > (WIDTH - pSY / 2))
-                {
-                    iT = floor(ii / pSX);
-                    jT = floor(jj / pSY);
-                    th11 = thresholds.at<uchar>(iT, jT);
-                    th12 = thresholds.at<uchar>(iT, jT);
-                    th21 = thresholds.at<uchar>(iT, jT);
-                    th22 = thresholds.at<uchar>(iT, jT);
-                }
-
-                // Horizontal borders of the image
-                if (ii > pSX / 2 && ii <= (HEIGHT - pSX / 2) && jj < pSY / 2 || ii > pSX / 2 && ii <= (HEIGHT - pSX / 2) && jj > (WIDTH - pSY / 2))
-                {
-                    iT = floor((ii - pSX / 2) / pSX);
-                    jT = floor((jj - pSY / 2) / pSY);
-                    th11 = thresholds.at<uchar>(iT, jT);
-                    th12 = thresholds.at<uchar>(iT + 1, jT);
-                    th21 = thresholds.at<uchar>(iT, jT);
-                    th22 = thresholds.at<uchar>(iT + 1, jT);
-                }
-
-                // Vertical borders of the image
-                if (jj > pSY / 2 && jj <= (WIDTH - pSY / 2) && ii < pSX / 2 || jj > pSY / 2 && jj <= (WIDTH - pSY / 2) && ii > (HEIGHT - pSX / 2))
-                {
-                    iT = floor((ii - pSX / 2) / pSX);
-                    jT = floor((jj - pSY / 2) / pSY);
-                    th11 = thresholds.at<uchar>(iT, jT);
-                    th12 = thresholds.at<uchar>(iT, jT);
-                    th21 = thresholds.at<uchar>(iT, jT + 1);
-                    th22 = thresholds.at<uchar>(iT, jT + 1);
-                }
-
-                // Inside of image
-                if (ii >= pSX / 2 && ii < (HEIGHT - pSX / 2) && jj >= pSY / 2 && jj < (WIDTH - pSY / 2))
-                {
-                    iT = floor((ii - pSX / 2) / pSX);
-                    jT = floor((jj - pSY / 2) / pSY);
-                    th11 = thresholds.at<uchar>(iT, jT);
-                    th12 = thresholds.at<uchar>(iT + 1, jT);
-                    th21 = thresholds.at<uchar>(iT, jT + 1);
-                    th22 = thresholds.at<uchar>(iT + 1, jT + 1);
-                }
-
-                dX1 = ii - pSX / 2 - (iT - 0) * pSX;
-                dX2 = (iT + 1) * pSX - (ii - pSX / 2);
-                dY1 = jj - pSY / 2 - (jT - 0) * pSY;
-                dY2 = (jT + 1) * pSY - (jj - pSY / 2);
-                th1 = th11 * (dX2 / pSX) + th12 * (dX1 / pSX);
-                th2 = th21 * (dX2 / pSX) + th22 * (dX1 / pSX);
-                th = th1 * (dY2 / pSY) + th2 * (dY1 / pSY);
-                IB_L.at<uchar>(ii, jj) = 255 * (grey.at<uchar>(ii, jj) < th);
-            }
-        }
+        cv::Mat IB_L = frame.interpolation(std::get<1>(windows_thr));
 
         // Dilation 3x3
-        cv::Mat IB_D = cv::Mat::zeros(HEIGHT, WIDTH, CV_8UC1);
-        cv::dilate(IB_L, IB_D, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3)));
+        cv::Mat IB_D = frame.dilatation(IB_L, 3);
 
         // Median filter 5x5
-        cv::Mat IB_M = cv::Mat::zeros(HEIGHT, WIDTH, CV_8UC1);
-        cv::medianBlur(IB_D, IB_M, 5);
+        cv::Mat IB_M = frame.median_filter(IB_D, 5);
 
         // Erosion 3x3
-        cv::Mat IB_E = cv::Mat::zeros(HEIGHT, WIDTH, CV_8UC1);
-        cv::erode(IB_M, IB_E, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3)));
+        cv::Mat IB_E = frame.erosion(IB_M, 3);
 
 #if USE_MASK
         // Use the UAV mask
-        for (int jj = 0; jj < WIDTH; jj++)
-        {
-            for (int ii = 0; ii < HEIGHT; ii++)
-            {
-                if (mask.at<uchar>(ii, jj) == 0)
-                    IB_E.at<uchar>(ii, jj) = 0;
-            }
-        }
+        cv::Mat mask = cv::imread(PATH_MASK);
+        erosion = frame.use_uav_mask(erosion, mask)
 #endif
 
         // Connected Component Labelling (CCL)
-        // Stats: leftmost(x), topmost(y), horizontal size, vertical size, total area
-        cv::Mat IB_S, stats, cent;
-        cv::connectedComponentsWithStats(IB_E, IB_S, stats, cent, 8, CV_32S, cv::CCL_DEFAULT);
-        cv::normalize(IB_S, IB_S, 0, 255, cv::NORM_MINMAX, CV_8UC1, cv::Mat());
+        std::tuple<cv::Mat, cv::Mat, cv::Mat> ccl = frame.connected_component_labelling(IB_E);
 
         // Convert binary image to 3-channel image
-        cv::Mat IB_VIS = cv::Mat::zeros(HEIGHT, WIDTH, CV_8UC3);
-        cv::Mat channel[3];
-        split(IB_VIS, channel);
-        channel[0] = IB_E;
-        channel[1] = IB_E;
-        channel[2] = IB_E;
-        merge(channel, 3, IB_VIS);
+        cv::Mat IB_VIS = frame.bin_to_3ch(IB_E);
+
+        // Extract stats from CCL
+        cv::Mat stats = std::get<1>(ccl);
+
+        int circle_size = table_circles[it - listOfFiles.begin() - 2];
+        int square_size = table_squares[it - listOfFiles.begin() - 2];
 
         // Temporary vectors for centroids (cent) of circles (c), squares (s), rectangles (r)
         std::vector<std::vector<double>> centc;
@@ -658,7 +440,7 @@ int main()
 
         cv::namedWindow("Detection result", cv::WINDOW_NORMAL);
         cv::imshow("Detection result", IB_VIS);
-        std::string path_img = "/home/jan/ROS_project/drone_landing_ROS/output/out_img1/detection_result_" + std::to_string(it - listOfFiles.begin() - 2)  + ".png";
+        std::string path_img = "/home/jan/ROS_project/drone_landing_ROS/output/out_test/detection_result_" + std::to_string(it - listOfFiles.begin() - 2)  + ".png";
         cv::imwrite(path_img, IB_VIS);
         std::cout <<" - done." << std::endl;
         cv::waitKey(1);

@@ -191,6 +191,7 @@ cv::Mat FrameProcessing::erosion(cv::Mat img, int size)
 cv::Mat FrameProcessing::use_uav_mask(cv::Mat img, cv::Mat mask)
 {
     cv::Mat IB_mask = img;
+    cv::cvtColor(mask, mask, cv::COLOR_BGR2GRAY);
 
     for (int jj = 0; jj < m_width; jj++)
     {

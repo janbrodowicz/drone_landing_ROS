@@ -3,6 +3,12 @@
 using namespace altitude;
 
 
+AltitudeDataProcessingBase::AltitudeDataProcessingBase(double altitude) : 
+    m_altitude(altitude)
+{
+
+};
+
 int AltitudeDataProcessingBase::exp_square_size(int circle_size)
 {
     int square_size;
