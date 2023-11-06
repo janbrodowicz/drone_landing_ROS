@@ -117,9 +117,10 @@ namespace fs = std::experimental::filesystem;
 // Path to a directory containing a dataset
 // const std::string PATH = "dataset/test_set1/";
 // const fs::path CURR_PATH = fs::current_path();
-const fs::path PATH{"/home/jan/ROS_project/drone_landing_ROS/dataset/test_set1"};
-const std::string PATH_HEIGHT = "/home/jan/ROS_project/drone_landing_ROS/dataset/test_set1_data.csv";
-const std::string PATH_LOGS = "/home/jan/ROS_project/drone_landing_ROS/output/test_set1_logs.csv";
+const std::string BASE_PATH = "/home/jan/ROS_project/drone_landing_ROS";
+const fs::path PATH{BASE_PATH/"dataset/test_set1"};
+const std::string PATH_HEIGHT = BASE_PATH + "/dataset/test_set1_data.csv";
+const std::string PATH_LOGS = BASE_PATH + "/output/test_set1_logs.csv";
 
 #if USE_MASK
 const std::string PATH_MASK = "uav_mask.png";
@@ -527,7 +528,7 @@ int main()
         // Iterate through all detected circles, squares and rectangles
         if ((!bbc.empty()) && (!cents.empty()) && (!centr.empty()))
         {
-            std::cout << "All detected circles, squares, rectangles..." << std::endl;
+            // std::cout << "All detected circles, squares, rectangles..." << std::endl;
             for (int i = 0; i < bbc.size(); i++)
             {
                 for (int j = 0; j < cents.size(); j++)
